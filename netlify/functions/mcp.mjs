@@ -106,7 +106,8 @@ function htmlToCleanText(html) {
   s = stripHiddenSpans(s);
   s = s.replace(/<br\s*\/?>/gi, "\n");
   s = s.replace(/<\/(?:p|div|li|tr|h[1-6])>/gi, "\n");
-  s = s.replace(/<[^>]+>/g, " ");
+  // إزالة الوسوم بما فيها السمات المقتبسة التي قد تحوي علامات < أو > مثل onclick="Tip('<IFRAME...>')"
+  s = s.replace(/<(?:[^>"']|"[^"]*"|'[^']*')*>/g, " ");
   s = decodeHtmlEntities(s);
   // إزالة أي بقايا لنصوص nindex.php?page=... إن وجدت كنص حر
   s = s.replace(/nindex\.php\?page=[a-zA-Z0-9_=&-]+/g, "");
@@ -124,7 +125,18 @@ async function fetchText(url) {
   if (!res.ok) {
     throw new Error(`HTTP ${res.status} أثناء جلب الرابط: ${url}`);
   }
-  return await res.text();
+  const buf = await res.arrayBuffer();
+  const contentType = (res.headers.get("content-type") || "").toLowerCase();
+  if (contentType.includes("windows-1256") || contentType.includes("cp1256")) {
+    return new TextDecoder("windows-1256").decode(buf);
+  }
+  const utf8Text = new TextDecoder("utf-8").decode(buf);
+  // صفحات nindex.php القديمة في إسلام ويب قد ترسل ترميز windows-1256 دون إعلان في الترويسة
+  const replacementCount = (utf8Text.match(/\uFFFD/g) || []).length;
+  if (replacementCount > 5 || /charset\s*=\s*windows-1256/i.test(utf8Text)) {
+    return new TextDecoder("windows-1256").decode(buf);
+  }
+  return utf8Text;
 }
 
 // ============================================================================
